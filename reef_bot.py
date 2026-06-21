@@ -128,37 +128,39 @@ claude_client = Anthropic(api_key=CLAUDE_API_KEY)
 # ──────────────────────────────────────────
 # Prompts
 # ──────────────────────────────────────────
-GEMINI_SYSTEM = """คุณเป็นผู้เชี่ยวชาญตู้ทะเลที่ตอบตรง ชัดเจน จริงจัง
-ไม่ใช้ roleplay ไม่เล่นบทบาท ไม่มีอารมณ์ขัน
-ให้ข้อมูลที่ถูกต้องและครบถ้วน ตรงประเด็น
-ตอบกระชับ ไม่เกิน 250 คำ ใช้ emoji แบ่งหัวข้อได้เล็กน้อย"""
+GEMINI_SYSTEM = """คุณเป็นผู้เชี่ยวชาญตู้ทะเลฝั่ง Gemini
+ตอบคำถามอย่างตรงไปตรงมา ให้ข้อมูลที่ครบถ้วน
+ตอบกระชับ ไม่เกิน 180 คำ ใช้ emoji ได้เล็กน้อย"""
 
-CLAUDE_SYSTEM = """คุณเป็นผู้เชี่ยวชาญตู้ทะเลที่เน้นความถูกต้องทางเทคนิค
+CLAUDE_SYSTEM = """คุณเป็นผู้เชี่ยวชาญตู้ทะเลฝั่ง Claude เน้นความถูกต้องทางเทคนิค
 บริบทตู้: LPS-dominant ขนาด 24 นิ้ว (~140L) ระบบ KZ (ZeoStart3 + CV)
 ปลา: Clownfish 2 ตัว (Black + Orange)
 ปะการัง: Hammer, Octopus, Brain, Candy Cane, Acan, GSP, ลูกโป่ง, Zoa
 Skimmer: Aqua Excel Nano 70D | PO4 ~0–0.03 | NO2 = 0
-ตอบตรง ชัดเจน เน้นข้อเท็จจริงเชิงเทคนิค
-ตอบกระชับ ไม่เกิน 200 คำ"""
+ตอบกระชับ ไม่เกิน 180 คำ"""
 
-SYNTHESIS_TEMPLATE = """คุณเป็นผู้สังเคราะห์คำตอบ ได้รับคำตอบ 2 ฉบับสำหรับคำถามเรื่องตู้ทะเล:
+CLAUDE_CRITIQUE_TEMPLATE = """คุณเป็น Claude ผู้เชี่ยวชาญเทคนิคตู้ทะเล
+บริบทตู้: LPS-dominant 24 นิ้ว (~140L) ระบบ KZ | Clownfish 2 ตัว | PO4 ~0–0.03 | Skimmer Aqua Excel Nano 70D
 
-[คำถามผู้ใช้]:
-{question}
-
-[Gemini]:
+Gemini เพิ่งตอบคำถาม "{question}" ว่า:
+---
 {gemini}
+---
 
-[Claude — เชิงเทคนิค]:
-{claude}
+จงวิจารณ์คำตอบของ Gemini แบบตรงๆ:
+- ถ้า Gemini พูดผิด ให้แย้งทันที บอกว่าผิดตรงไหนและถูกต้องคือ?
+- ถ้า Gemini พูดถูกแต่ไม่ครบ ให้เสริมในสิ่งที่ขาด
+- ถ้า Gemini พูดถูกหมด ให้บอกว่าเห็นด้วย แต่เพิ่ม insight เชิงเทคนิค
+ตอบกระชับ ไม่เกิน 150 คำ ไม่ต้องเกริ่น ตอบตรงๆ เลย"""
 
-จงสังเคราะห์คำตอบที่ดีที่สุดโดย:
-1. ถ้า Claude แก้ไขข้อมูลของ Gemini ให้ใช้ข้อมูล Claude เป็นหลัก
-2. ถ้าทั้งสองเห็นตรงกัน ให้รวมเป็นคำตอบเดียวกันอย่างลื่นไหล
-3. ตอบเป็นภาษาไทย กระชับ ไม่เกิน 400 คำ
-4. ใช้ emoji แบ่งหัวข้อให้อ่านง่ายบน LINE
-5. ลงท้ายด้วยบรรทัดเล็กๆ: "🤖 Gemini + 🔬 Claude"
-"""
+SYNTHESIS_TEMPLATE = """สรุปจากการถกกันระหว่าง Gemini และ Claude เรื่อง "{question}":
+
+Gemini: {gemini}
+Claude แย้ง/เสริม: {claude_critique}
+
+จงสรุปคำตอบสุดท้ายแบบกระชับ ไม่เกิน 80 คำ
+โดยใช้ข้อมูลที่ถูกต้องที่สุดจากทั้งสองฝั่ง
+ไม่ต้องพูดว่า "สรุป" — ตอบตรงๆ เลย"""
 
 # ──────────────────────────────────────────
 # AI Functions
@@ -176,38 +178,37 @@ def ask_gemini(question: str, history: list) -> str:
         return f"[Gemini error: {e}]"
 
 
-def ask_claude(question: str, history: list) -> str:
-    """ถาม Claude พร้อม history — fallback ไป Gemini ถ้า credits หมด"""
-    history_text = build_history_text(history)
-    messages = [{"role": "user", "content": f"{CLAUDE_SYSTEM}\n\n{history_text}คำถาม: {question}"}]
+def ask_claude_critique(question: str, gemini_ans: str) -> str:
+    """ให้ Claude วิจารณ์คำตอบของ Gemini — fallback ไป Gemini ถ้า credits หมด"""
+    prompt = CLAUDE_CRITIQUE_TEMPLATE.format(question=question, gemini=gemini_ans)
     try:
         resp = claude_client.messages.create(
             model="claude-opus-4-8",
-            max_tokens=800,
-            messages=messages,
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text
     except Exception:
         try:
             resp = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=f"{CLAUDE_SYSTEM}\n\n{history_text}คำถาม: {question}",
+                contents=prompt,
             )
             return resp.text
         except Exception as e:
             return f"[error: {e}]"
 
 
-def synthesize(question: str, gemini_ans: str, claude_ans: str) -> str:
+def synthesize(question: str, gemini_ans: str, claude_critique: str) -> str:
     prompt = SYNTHESIS_TEMPLATE.format(
         question=question,
         gemini=gemini_ans,
-        claude=claude_ans,
+        claude_critique=claude_critique,
     )
     try:
         resp = claude_client.messages.create(
             model="claude-opus-4-8",
-            max_tokens=1500,
+            max_tokens=400,
             messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text
@@ -223,26 +224,26 @@ def synthesize(question: str, gemini_ans: str, claude_ans: str) -> str:
 
 
 def get_best_answer(question: str, user_id: str) -> str:
-    """ถาม Gemini + Claude พร้อมกัน พร้อม history แล้ว synthesize และบันทึกลง DB"""
+    """Gemini เสนอ → Claude แย้ง → สรุป แบบ debate format"""
     history = get_history(user_id)
-    results = {"gemini": None, "claude": None}
 
-    def run_gemini():
-        results["gemini"] = ask_gemini(question, history)
+    # Step 1: Gemini ตอบก่อน
+    gemini_ans = ask_gemini(question, history)
 
-    def run_claude():
-        results["claude"] = ask_claude(question, history)
+    # Step 2: Claude วิจารณ์ Gemini (ทำหลัง Gemini เสร็จ)
+    claude_critique = ask_claude_critique(question, gemini_ans)
 
-    t1 = threading.Thread(target=run_gemini)
-    t2 = threading.Thread(target=run_claude)
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
+    # Step 3: สรุปผล
+    final = synthesize(question, gemini_ans, claude_critique)
 
-    answer = synthesize(question, results["gemini"], results["claude"])
+    # รวมเป็น debate format
+    answer = (
+        f"🤖 Gemini:\n{gemini_ans}\n\n"
+        f"🔬 Claude แย้ง:\n{claude_critique}\n\n"
+        f"⚖️ ตัดสิน:\n{final}"
+    )
 
-    # บันทึกลง SQLite (จำได้ข้ามเซสชัน)
+    # บันทึกลง SQLite
     add_to_history(user_id, "user", question)
     add_to_history(user_id, "assistant", answer)
 
