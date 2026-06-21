@@ -252,6 +252,7 @@ def get_best_answer(question: str, user_id: str) -> str:
 # ──────────────────────────────────────────
 # Flask & LINE Webhook
 # ──────────────────────────────────────────
+init_db()  # เรียกตอน import — ทำงานทั้ง gunicorn และ python โดยตรง
 app = Flask(__name__)
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
@@ -308,7 +309,6 @@ def handle_message(event):
 # Main
 # ──────────────────────────────────────────
 if __name__ == "__main__":
-    init_db()
     port = int(os.environ.get("PORT", 5000))
     print(f"🐠 Reef Bot กำลังเริ่มต้น... port {port}")
     app.run(host="0.0.0.0", port=port, debug=False)
