@@ -30,6 +30,7 @@ from linebot.v3.messaging import (
     ApiClient,
     MessagingApi,
     ReplyMessageRequest,
+    PushMessageRequest,
     TextMessage,
     ShowLoadingAnimationRequest,
 )
@@ -280,10 +281,9 @@ def handle_message(event):
     user_message = event.message.text
     user_id = event.source.user_id
 
+    # แสดง loading animation ทันที
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-
-        # แสดง loading animation ขณะรอ AI
         try:
             line_bot_api.show_loading_animation(
                 ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=60)
@@ -291,19 +291,18 @@ def handle_message(event):
         except Exception:
             pass
 
-        # ดึงคำตอบ (พร้อม persistent memory ต่อ user)
+    # ประมวลผลใน background thread — ใช้ push_message ไม่มี token หมดอายุ
+    def process_and_push():
         answer = get_best_answer(user_message, user_id)
-
-        # ตัดถ้าเกิน 4900 ตัวอักษร (LINE limit = 5000)
         if len(answer) > 4900:
             answer = answer[:4897] + "..."
-
-        line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=answer)],
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.push_message(
+                PushMessageRequest(to=user_id, messages=[TextMessage(text=answer)])
             )
-        )
+
+    threading.Thread(target=process_and_push, daemon=True).start()
 
 
 # ──────────────────────────────────────────
