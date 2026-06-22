@@ -181,7 +181,8 @@ def ask_gemini(question: str, history: list) -> str:
 
 def ask_claude_critique(question: str, gemini_ans: str) -> str:
     """ให้ Claude วิจารณ์คำตอบของ Gemini — fallback ไป Gemini ถ้า credits หมด"""
-    prompt = CLAUDE_CRITIQUE_TEMPLATE.format(question=question, gemini=gemini_ans)
+    # ใช้ replace แทน .format() เพื่อป้องกัน crash จาก { } ใน AI response
+    prompt = CLAUDE_CRITIQUE_TEMPLATE.replace("{question}", question).replace("{gemini}", gemini_ans)
     try:
         resp = claude_client.messages.create(
             model="claude-opus-4-8",
@@ -201,11 +202,10 @@ def ask_claude_critique(question: str, gemini_ans: str) -> str:
 
 
 def synthesize(question: str, gemini_ans: str, claude_critique: str) -> str:
-    prompt = SYNTHESIS_TEMPLATE.format(
-        question=question,
-        gemini=gemini_ans,
-        claude_critique=claude_critique,
-    )
+    prompt = (SYNTHESIS_TEMPLATE
+              .replace("{question}", question)
+              .replace("{gemini}", gemini_ans)
+              .replace("{claude_critique}", claude_critique))
     try:
         resp = claude_client.messages.create(
             model="claude-opus-4-8",
@@ -293,14 +293,20 @@ def handle_message(event):
 
     # ประมวลผลใน background thread — ใช้ push_message ไม่มี token หมดอายุ
     def process_and_push():
-        answer = get_best_answer(user_message, user_id)
-        if len(answer) > 4900:
-            answer = answer[:4897] + "..."
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            line_bot_api.push_message(
-                PushMessageRequest(to=user_id, messages=[TextMessage(text=answer)])
-            )
+        try:
+            answer = get_best_answer(user_message, user_id)
+            if len(answer) > 4900:
+                answer = answer[:4897] + "..."
+        except Exception as e:
+            answer = f"⚠️ เกิดข้อผิดพลาด: {e}"
+        try:
+            with ApiClient(configuration) as api_client:
+                line_bot_api = MessagingApi(api_client)
+                line_bot_api.push_message(
+                    PushMessageRequest(to=user_id, messages=[TextMessage(text=answer)])
+                )
+        except Exception as e:
+            print(f"push_message error: {e}")
 
     threading.Thread(target=process_and_push, daemon=True).start()
 
