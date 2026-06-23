@@ -171,7 +171,7 @@ def ask_gemini(question: str, history: list) -> str:
     prompt = f"{GEMINI_SYSTEM}\n\n{history_text}คำถาม: {question}"
     try:
         resp = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             contents=prompt,
         )
         return resp.text
@@ -193,7 +193,7 @@ def ask_claude_critique(question: str, gemini_ans: str) -> str:
     except Exception:
         try:
             resp = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 contents=prompt,
             )
             return resp.text
@@ -216,7 +216,7 @@ def synthesize(question: str, gemini_ans: str, claude_critique: str) -> str:
     except Exception:
         try:
             resp = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 contents=prompt,
             )
             return resp.text
