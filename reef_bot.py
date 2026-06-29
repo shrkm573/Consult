@@ -130,15 +130,15 @@ claude_client = Anthropic(api_key=CLAUDE_API_KEY)
 # Prompts
 # ──────────────────────────────────────────
 GEMINI_SYSTEM = """คุณเป็นผู้เชี่ยวชาญตู้ทะเลฝั่ง Gemini
-ตอบคำถามอย่างตรงไปตรงมา ให้ข้อมูลที่ครบถ้วน
-ตอบกระชับ ไม่เกิน 180 คำ ใช้ emoji ได้เล็กน้อย"""
+ตอบคำถามอย่างละเอียดและครบถ้วน ให้ข้อมูลที่เป็นประโยชน์มากที่สุด
+ใช้ emoji ได้เล็กน้อย ไม่ต้องจำกัดความยาวคำตอบ"""
 
 CLAUDE_SYSTEM = """คุณเป็นผู้เชี่ยวชาญตู้ทะเลฝั่ง Claude เน้นความถูกต้องทางเทคนิค
 บริบทตู้: LPS-dominant ขนาด 24 นิ้ว (~140L) ระบบ KZ (ZeoStart3 + CV)
 ปลา: Clownfish 2 ตัว (Black + Orange)
 ปะการัง: Hammer, Octopus, Brain, Candy Cane, Acan, GSP, ลูกโป่ง, Zoa
 Skimmer: Aqua Excel Nano 70D | PO4 ~0–0.03 | NO2 = 0
-ตอบกระชับ ไม่เกิน 180 คำ"""
+ตอบให้ละเอียดและครบถ้วน ไม่ต้องจำกัดความยาวคำตอบ"""
 
 CLAUDE_CRITIQUE_TEMPLATE = """คุณเป็น Claude ผู้เชี่ยวชาญเทคนิคตู้ทะเล
 บริบทตู้: LPS-dominant 24 นิ้ว (~140L) ระบบ KZ | Clownfish 2 ตัว | PO4 ~0–0.03 | Skimmer Aqua Excel Nano 70D
@@ -152,15 +152,15 @@ Gemini เพิ่งตอบคำถาม "{question}" ว่า:
 - ถ้า Gemini พูดผิด ให้แย้งทันที บอกว่าผิดตรงไหนและถูกต้องคือ?
 - ถ้า Gemini พูดถูกแต่ไม่ครบ ให้เสริมในสิ่งที่ขาด
 - ถ้า Gemini พูดถูกหมด ให้บอกว่าเห็นด้วย แต่เพิ่ม insight เชิงเทคนิค
-ตอบกระชับ ไม่เกิน 150 คำ ไม่ต้องเกริ่น ตอบตรงๆ เลย"""
+ไม่ต้องเกริ่น ตอบตรงๆ เลย ให้ครบและละเอียด"""
 
 SYNTHESIS_TEMPLATE = """สรุปจากการถกกันระหว่าง Gemini และ Claude เรื่อง "{question}":
 
 Gemini: {gemini}
 Claude แย้ง/เสริม: {claude_critique}
 
-จงสรุปคำตอบสุดท้ายแบบกระชับ ไม่เกิน 80 คำ
-โดยใช้ข้อมูลที่ถูกต้องที่สุดจากทั้งสองฝั่ง
+จงสรุปคำตอบสุดท้ายโดยใช้ข้อมูลที่ถูกต้องที่สุดจากทั้งสองฝั่ง
+ครบถ้วนและละเอียด ไม่ต้องจำกัดความยาว
 ไม่ต้องพูดว่า "สรุป" — ตอบตรงๆ เลย"""
 
 # ──────────────────────────────────────────
@@ -186,7 +186,7 @@ def ask_claude_critique(question: str, gemini_ans: str) -> str:
     try:
         resp = claude_client.messages.create(
             model="claude-opus-4-8",
-            max_tokens=600,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text
@@ -209,7 +209,7 @@ def synthesize(question: str, gemini_ans: str, claude_critique: str) -> str:
     try:
         resp = claude_client.messages.create(
             model="claude-opus-4-8",
-            max_tokens=400,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text
@@ -295,8 +295,6 @@ def handle_message(event):
     def process_and_push():
         try:
             answer = get_best_answer(user_message, user_id)
-            if len(answer) > 4900:
-                answer = answer[:4897] + "..."
         except Exception as e:
             answer = f"⚠️ เกิดข้อผิดพลาด: {e}"
         try:
