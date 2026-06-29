@@ -234,6 +234,19 @@ def health():
     return "🐠 Reef Bot is running!"
 
 
+@app.route("/stats", methods=["GET"])
+def stats():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM history")
+    total = c.fetchone()[0]
+    c.execute("SELECT COUNT(DISTINCT user_id) FROM history")
+    users = c.fetchone()[0]
+    conn.close()
+    size_kb = os.path.getsize(DB_PATH) / 1024
+    return f"Messages: {total} | Users: {users} | DB size: {size_kb:.1f} KB"
+
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_message = event.message.text
