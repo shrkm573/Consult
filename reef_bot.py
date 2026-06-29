@@ -297,12 +297,15 @@ def handle_message(event):
             answer = get_best_answer(user_message, user_id)
         except Exception as e:
             answer = f"⚠️ เกิดข้อผิดพลาด: {e}"
+        # LINE API จำกัด 5000 ตัวอักษร/ข้อความ — แบ่งส่งหลายก้อน
+        chunks = [answer[i:i+4900] for i in range(0, len(answer), 4900)]
         try:
             with ApiClient(configuration) as api_client:
                 line_bot_api = MessagingApi(api_client)
-                line_bot_api.push_message(
-                    PushMessageRequest(to=user_id, messages=[TextMessage(text=answer)])
-                )
+                for chunk in chunks:
+                    line_bot_api.push_message(
+                        PushMessageRequest(to=user_id, messages=[TextMessage(text=chunk)])
+                    )
         except Exception as e:
             print(f"push_message error: {e}")
 
